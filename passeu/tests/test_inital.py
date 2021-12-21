@@ -206,20 +206,21 @@ def solve_shift_scheduling(params, output_proto):
             obj_bool_vars.extend(variables)
             obj_bool_coeffs.extend(coeffs)
 
-    # Max weekly hours constraint
-    for e in range(num_employees):
-        for s in range(shop_data.num_shifts):
-            working_hours = [work_hours[e, s, d] for d in range(shop_data.num_days)]
-            hard_min = employees[e].contract_weekly_hours
-            hard_max = hard_min
-            variables, coeffs = constraints.add_soft_sum_constraint(
-                model, working_hours,
-                hard_min, hard_min, 0,
-                hard_max, hard_max, 0,
-                f'weekly_hours_constraint(employee{e}, shift{s}, week{w}'
-            )
-            obj_int_vars.extend(variables)
-            obj_int_coeffs.extend(coeffs)
+    # # Max weekly hours constraint
+    # maybe add AND constraint, like works AND work_hours > 0
+    # for e in range(num_employees):
+    #     for s in range(shop_data.num_shifts):
+    #         working_hours = [work_hours[e, s, d] for d in range(shop_data.num_days)]
+    #         hard_min = employees[e].contract_weekly_hours
+    #         hard_max = hard_min
+    #         variables, coeffs = constraints.add_soft_sum_constraint(
+    #             model, working_hours,
+    #             hard_min, hard_min, 0,
+    #             hard_max, hard_max, 0,
+    #             f'weekly_hours_constraint(employee{e}, shift{s}, week{w}'
+    #         )
+    #         obj_int_vars.extend(variables)
+    #         obj_int_coeffs.extend(coeffs)
 
 
     # Link off shifts and 0 hours
@@ -229,10 +230,11 @@ def solve_shift_scheduling(params, output_proto):
             # model.Add(ct)
             # model.AddBoolAnd([work[(e, 0, d)], work_hours[e, 0, d].IsEqualTo(1)])
             pass
-            # model.Add(work_hours[e, 0, d] == 0)
+            model.Add(work_hours[e, 0, d] == 0)
             # model.AddBoolAnd([work[e, ]])
             for s in range(1, shop_data.num_shifts):
-                # model.Add(work_hours[e, s, d] != 0)
+                model.Add(work_hours[e, s, d] != 0)
+                # model.AddBoolOr([work[(e, s, d)].Not(), work_hours[(e, s, d)].IsEqualTo(0)])
                 # new_var = model.NewBoolVar()
                 # model.AddBoolAnd([new_var, work[(e, s, d)]])
                 # model.AddImplication(work[(e, s, d)].Not(), work_hours[(e, s, d)].IsEqualTo(0))
