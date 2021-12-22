@@ -5,6 +5,7 @@ import passeu.utils.constraints as constraints
 from absl import app
 from absl import flags
 from google.protobuf import text_format
+from passeu.utils.datastructures import Employee, ShopData
 
 FLAGS = flags.FLAGS
 
@@ -14,67 +15,6 @@ flags.DEFINE_string('params', 'max_time_in_seconds:10.0',
                     'Sat solver parameters.')
 
 # DATA STRUCTURES
-class Employee:
-    num_employees = 0  # class counter
-
-    def __init__(self, name, contract_weekly_hours):
-        self.name = name
-        self.id = Employee.num_employees
-        self.contract_weekly_hours = contract_weekly_hours
-
-        Employee.num_employees += 1  # update counter
-
-        self.schedule = None
-
-
-# PROBLEM DATA
-class ShopData:
-    shifts = ['O', 'M', 'A', 'C']  # Off, Morning, Afternoon, Closing
-    days = ['M', 'T', 'W', 'Th', 'F', 'St', 'Sn']
-
-    def __init__(self):
-
-        # daily demands for work shifts (morning, afternon, night) for each day
-        # of the week starting on Monday. HEADCOUNT
-        self.weekly_cover_demands = [
-            (2, 3, 1),  # Monday
-            (2, 3, 1),  # Tuesday
-            (2, 2, 2),  # Wednesday
-            (2, 3, 1),  # Thursday
-            (2, 2, 2),  # Friday
-            (1, 2, 3),  # Saturday
-            (1, 3, 1),  # Sunday
-        ]
-
-        # Sum of all employee working hours for each day of the week
-        self.daily_manhour_targets = [
-            40,  # monday
-            40,  # tuesday
-            40,  # wednesday
-            40,  # thurs
-            40,  # fri
-            40,  # sat
-            40,  # sun
-        ]
-
-        # Fixed assignments (employee_id, shift, day)
-        self.fixed_assignments = [
-            (3, 0, 0)
-        ]
-
-    @property
-    def num_days(self):
-        # In case we need it later
-        return 7
-
-    @property
-    def num_shifts(self):
-        return len(self.shifts)
-
-    @property
-    def num_weeks(self):
-        return 1
-
 
 def solve_shift_scheduling(params, output_proto):
     # INPUT DATA
@@ -84,7 +24,7 @@ def solve_shift_scheduling(params, output_proto):
         Employee('Logan', 40),
         Employee('Dass', 40),
         Employee('Curro', 40),
-        Employee('Dakota', 30),
+        Employee('Dakota', 26),
         Employee('Turco', 40),
         Employee('Duque', 40),
         Employee('Marque', 40),
@@ -167,10 +107,9 @@ def solve_shift_scheduling(params, output_proto):
     work_hours = {}
     domain = cp_model.Domain.FromValues([0, 6, 8])
     for e in range(num_employees):
-        for s in range(shop_data.num_shifts):
             for d in range(shop_data.num_days):
-                work_hours[e, s, d] = model.NewIntVarFromDomain(domain=domain,
-                                                                name=f'workhours{e}_{s}_{d}')
+                work_hours[e, d] = model.NewIntVarFromDomain(domain=domain,
+                                                            name=f'workhours{e}_{d}')
 
     # Linear terms of the objective in a minimization context.
     obj_int_vars = []
@@ -182,8 +121,6 @@ def solve_shift_scheduling(params, output_proto):
     for e in range(num_employees):
         for d in range(shop_data.num_days):
             model.Add(sum(work[e, s, d] for s in range(shop_data.num_shifts)) == 1)
-
-    # TODO: need to add not also boolean on employee working but also for how long
 
     # Fixed assignments. Hard constraint
     for e, s, d in shop_data.fixed_assignments:
@@ -206,47 +143,18 @@ def solve_shift_scheduling(params, output_proto):
             obj_bool_vars.extend(variables)
             obj_bool_coeffs.extend(coeffs)
 
-    # # Max weekly hours constraint
-    # maybe add AND constraint, like works AND work_hours > 0
-    # for e in range(num_employees):
-    #     for s in range(shop_data.num_shifts):
-    #         working_hours = [work_hours[e, s, d] for d in range(shop_data.num_days)]
-    #         hard_min = employees[e].contract_weekly_hours
-    #         hard_max = hard_min
-    #         variables, coeffs = constraints.add_soft_sum_constraint(
-    #             model, working_hours,
-    #             hard_min, hard_min, 0,
-    #             hard_max, hard_max, 0,
-    #             f'weekly_hours_constraint(employee{e}, shift{s}, week{w}'
-    #         )
-    #         obj_int_vars.extend(variables)
-    #         obj_int_coeffs.extend(coeffs)
-
-
     # Link off shifts and 0 hours
     for e in range(num_employees):
         for d in range(shop_data.num_days):
-            # model.AddImplication(work[(e, 0, d)].IsEqualTo(1), work_hours[(e, 0, d)].IsEqualTo(0))
-            # model.Add(ct)
-            # model.AddBoolAnd([work[(e, 0, d)], work_hours[e, 0, d].IsEqualTo(1)])
-            pass
-            model.Add(work_hours[e, 0, d] == 0)
-            # model.AddBoolAnd([work[e, ]])
-            for s in range(1, shop_data.num_shifts):
-                model.Add(work_hours[e, s, d] != 0)
-                # model.AddBoolOr([work[(e, s, d)].Not(), work_hours[(e, s, d)].IsEqualTo(0)])
-                # new_var = model.NewBoolVar()
-                # model.AddBoolAnd([new_var, work[(e, s, d)]])
-                # model.AddImplication(work[(e, s, d)].Not(), work_hours[(e, s, d)].IsEqualTo(0))
-                pass
-                # model.AddImplication(work[(e, s, d)].Not(), work_hours[(e, s, d)].IsEqualTo(6))
-                # model.AddImplication(work[(e, 0, d)].IsEqualTo(1), work_hours[(e, s, d)].IsEqualTo(0))
-                # model.AddImplication(work[(e, s, d)].IsEqualTo(0), work_hours[(e, s, d)].IsEqualTo(0))
-                # import pdb; pdb.set_trace()
-                # model.AddImplication(work_hours[(e, s, d)].IsEqualTo(0), work[(e, s, d)].Not())
-                # model.AddBoolAnd([work[(e, 0, d)].IsEqualTo(1), work_hours[(e, 0, d)].IsEqualTo(0)])
+            model.Add(work_hours[(e, d)] == 0).OnlyEnforceIf(work[(e, 0, d)])
 
+            # This one should not be needed once we add the summation of weekly hours constraints
+            model.Add(work_hours[(e, d)] > 0).OnlyEnforceIf(work[(e, 0, d)].Not())
 
+    # Max weekly working hours - currently a hard constraint to meet contract hours
+    # TODO: add soft_max (contract hours) and hard_max (overtime)
+    for e in range(num_employees):
+        model.Add(sum([work_hours[(e, d)] for d in range(shop_data.num_days)]) == employees[e].contract_weekly_hours)
 
     # Weekly sum constraints
     for ct in weekly_sum_constraints:
@@ -331,21 +239,21 @@ def solve_shift_scheduling(params, output_proto):
             schedule = ''
             for d in range(shop_data.num_days):
                 for s in range(shop_data.num_shifts):
+                    # hours = solver.Value(work_hours[e, s, d])
+                    hours = solver.Value(work_hours[e, d])
                     works = solver.BooleanValue(work[e, s, d])
-                    # print(works, hours)
+                    # print(f'Shift {s}', works, hours)
                     if works:
-                        hours = solver.Value(work_hours[e, s, d])
                         schedule += shop_data.shifts[s] + f'({hours})' + ' '
             print(f'{employees[e].name} (id={e}): {schedule}')
         print()
-        import pdb; pdb.set_trace()
         print('Total Employee hours:')
         for e in range(num_employees):
             employee_hours = 0
             for d in range(shop_data.num_days):
                 for s in range(shop_data.num_shifts):
                     if solver.BooleanValue(work[e, s, d]):
-                        employee_hours += solver.Value(work_hours[e, s, d])
+                        employee_hours += solver.Value(work_hours[e, d])
             print(f'{employees[e].name} (id={e}): {employee_hours} hrs (max {employees[e].contract_weekly_hours} hrs)')
         print()
         print('Penalties:')
