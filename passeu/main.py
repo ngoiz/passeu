@@ -4,7 +4,7 @@ import passeu.utils.constraints as constraints
 from absl import app
 from absl import flags
 from google.protobuf import text_format
-from passeu.utils.datastructures import Employee, ShopData
+import passeu.utils.datastructures as datastructures
 
 FLAGS = flags.FLAGS
 
@@ -15,34 +15,19 @@ flags.DEFINE_string('params', 'max_time_in_seconds:10.0',
 
 # DATA STRUCTURES
 
-def solve_shift_scheduling(params, output_proto):
-    # INPUT DATA
-    shop_data = ShopData()
-    employees = []
-    employees.extend([
-        Employee('Logan', 40),
-        Employee('Dass', 40),
-        Employee('Curro', 40),
-        Employee('Dakota', 26),
-        Employee('Turco', 40),
-        Employee('Duque', 40),
-        Employee('Marque', 40),
-        # Employee('Turco2', 40),
-        # Employee('Duque2', 40),
-        # Employee('Marque2', 40)
-    ]
-    )
-    # build from Employee data
-    # Request: (employee, shift, day, weight)
-    # A negative weight indicates that the employee desire this assignment.
-    requests = [
-        (0, 0, 1, -2)  # Logan wants tuesday off
-    ]
-    num_employees = len(employees)
+def solve_shift_scheduling(params, output_proto, input_xls_file):
 
+    shop_data = datastructures.ShopData(input_xls_file)
+    shop_data.load_weekly_headcount_demand()
+    shop_data.load_employees()
 
-    # CONSTRAINTS
+    num_employees = shop_data.employee_data.num_employees
+    requests = shop_data.employee_data.requests
+    employees = shop_data.employee_data.employees
 
+    import pdb; pdb.set_trace()
+
+    # START CONSTRAINTS
     # Shift constraints on continuous sequence :
     #     (shift, hard_min, soft_min, min_penalty,
     #             soft_max, hard_max, max_penalty)
@@ -80,18 +65,12 @@ def solve_shift_scheduling(params, output_proto):
 
     # daily demands for work shifts (morning, afternoon, night) for each day
     # of the week starting on Monday.  TODO: change to hours?? -> Add a total worked hours soft constraint too
-    weekly_cover_demands = [
-        (1, 0, 1),  # Monday
-        (1, 0, 1),  # Tuesday
-        (1, 0, 2),  # Wednesday
-        (1, 0, 1),  # Thursday
-        (1, 0, 2),  # Friday
-        (1, 0, 3),  # Saturday
-        (1, 0, 1),  # Sunday
-    ]
+    weekly_cover_demands = shop_data.weekly_cover_demands
 
     # Penalty for exceeding the cover constraint per shift type.
     excess_cover_penalties = (2, 2, 5)
+
+    # END CONSTRAINTS
 
     model = cp_model.CpModel()
 
@@ -106,9 +85,9 @@ def solve_shift_scheduling(params, output_proto):
     work_hours = {}
     domain = cp_model.Domain.FromValues([0, 6, 8])
     for e in range(num_employees):
-            for d in range(shop_data.num_days):
-                work_hours[e, d] = model.NewIntVarFromDomain(domain=domain,
-                                                            name=f'workhours{e}_{d}')
+        for d in range(shop_data.num_days):
+            work_hours[e, d] = model.NewIntVarFromDomain(domain=domain,
+                                                         name=f'workhours{e}_{d}')
 
     # Linear terms of the objective in a minimization context.
     obj_int_vars = []
@@ -278,10 +257,9 @@ def solve_shift_scheduling(params, output_proto):
 
 
 def main(_):
-    solve_shift_scheduling(FLAGS.params, FLAGS.output_proto)
+    input_xls_file = './tests/interface/input_data.xls'
+    solve_shift_scheduling(FLAGS.params, FLAGS.output_proto, input_xls_file)
 
 
 if __name__ == '__main__':
-    print('Running...')
     app.run(main)
-    import pdb; pdb.set_trace()
