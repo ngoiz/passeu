@@ -58,10 +58,11 @@ class EmployeeData:
 class Employee:
     num_employees = 0  # class counter
 
-    def __init__(self, name, contract_weekly_hours):
+    def __init__(self, name, contract_weekly_hours, level=0):
         self.name = name
         self.id = Employee.num_employees
         self.contract_weekly_hours = contract_weekly_hours
+        self.level = level
 
         Employee.num_employees += 1  # update counter
 

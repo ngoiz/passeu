@@ -20,13 +20,13 @@ def solve_shift_scheduling(params, output_proto):
     shop_data = ShopData()
     employees = []
     employees.extend([
-        Employee('Logan', 40),
-        Employee('Dass', 40),
+        Employee('Logan', 40, level=1),
+        Employee('Dass', 40, level=1),
         Employee('Curro', 40),
         Employee('Dakota', 26),
         Employee('Turco', 40),
-        Employee('Duque', 40),
-        Employee('Marque', 40),
+        Employee('Duque', 40, level=2),
+        Employee('Marque', 40, level=2),
         # Employee('Turco2', 40),
         # Employee('Duque2', 40),
         # Employee('Marque2', 40)
@@ -88,6 +88,18 @@ def solve_shift_scheduling(params, output_proto):
         (1, 0, 2),  # Friday
         (1, 0, 3),  # Saturday
         (1, 0, 1),  # Sunday
+    ]
+
+    # Employee level experience demands by day
+    # (level0, level1, level2)
+    daily_experience_demands = [
+        (2, 1, 1),  # Monday
+        (2, 1, 1),  #
+        (2, 1, 1),  #
+        (2, 1, 1),  #
+        (2, 1, 1),
+        (2, 2, 1),
+        (2, 2, 1),
     ]
 
     # Penalty for exceeding the cover constraint per shift type.
@@ -169,6 +181,17 @@ def solve_shift_scheduling(params, output_proto):
                 obj_int_vars.extend(variables)
                 obj_int_coeffs.extend(coeffs)
 
+    # Daily experience requirements (and could be done per shift too but this example likely has too few employees)
+    levels = (0, 1, 2)  # currently all levels
+    for d in range(shop_data.num_days):
+        for l in levels:
+            variables = []
+            for e in range(num_employees):
+                if employees[e].level == l:
+                    variables.extend([work[(e, s, d)] for s in range(1, shop_data.num_shifts)])
+            model.Add(sum(variables) >= daily_experience_demands[d][l])
+
+
     # Penalized transitions
     for previous_shift, next_shift, cost in penalized_transitions:
         for e in range(num_employees):
@@ -230,9 +253,9 @@ def solve_shift_scheduling(params, output_proto):
     # Print solution.
     if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
         print()
-        header = '          '
+        header = 3*'\t'
         for w in range(shop_data.num_weeks):
-            header += 'M T W T F S S '
+            header += '\t'.join([f'{day}' for day in shop_data.days])
         print(header)
         for e in range(num_employees):
             schedule = ''
@@ -243,8 +266,8 @@ def solve_shift_scheduling(params, output_proto):
                     works = solver.BooleanValue(work[e, s, d])
                     # print(f'Shift {s}', works, hours)
                     if works:
-                        schedule += shop_data.shifts[s] + f'({hours})' + ' '
-            print(f'{employees[e].name} (id={e}): {schedule}')
+                        schedule += shop_data.shifts[s] + f'({hours})' + '\t'
+            print(f'{employees[e].name} (id={e}, l={employees[e].level}):\t{schedule}')
         print()
         print('Total Employee hours:')
         for e in range(num_employees):
@@ -254,6 +277,21 @@ def solve_shift_scheduling(params, output_proto):
                     if solver.BooleanValue(work[e, s, d]):
                         employee_hours += solver.Value(work_hours[e, d])
             print(f'{employees[e].name} (id={e}): {employee_hours} hrs (max {employees[e].contract_weekly_hours} hrs)')
+        print()
+        print('Employee Experience per day')
+        header = '\t\t' + '\t'.join([f'{day}' for day in shop_data.days])
+        print(header)
+        for l in levels:
+            out_str = f'Level {l}:\t'
+            for d in range(shop_data.num_days):
+                working_employees_of_level = 0
+                for e in range(num_employees):
+                    if employees[e].level == l:
+                        for s in range(1, shop_data.num_shifts):
+                            if solver.BooleanValue(work[(e, s, d)]):
+                                working_employees_of_level += 1
+                out_str += f'{working_employees_of_level}/{daily_experience_demands[d][l]}\t'
+            print(out_str)
         print()
         print('Penalties:')
         for i, var in enumerate(obj_bool_vars):
