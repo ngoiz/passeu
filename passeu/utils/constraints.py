@@ -229,6 +229,26 @@ class ContractHours(Constraint):
 class OvertimeContractHours(Constraint):
 
     def apply(self, model, work_hours, **kwargs):
+        """
+        Applies a linear penalty constraint on workers doing overtime (if allowed).
+
+        For each week, worker worked hours shall be above contract_hours but under contract_hours + max_overtime.
+        A linear penalty is applied on the number of overtime hours
+
+        Args:
+            model (cp_model.CpModel): model
+            work_hours (dict): Dictionary of (employee, day): IntegerVar containing employee working hours per day
+
+        Keyword Args:
+             overtime_max_cost (int): Maximum penalty applied for maximum overtime
+
+        Returns:
+            tuple: (variables, coefficients) overtime variables and excess coefficients to be added to model
+              minimisation function.
+
+        Warning:
+            Overtime not yet tested (0 overtime works)
+        """
         overtime_max_cost = kwargs.get('overtime_max_cost', 5)
         cost_variables = []
         cost_coefficients = []
