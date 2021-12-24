@@ -153,3 +153,48 @@ def add_soft_sum_constraint(model, works, hard_min, soft_min, min_cost,
         cost_coefficients.append(max_cost)
 
     return cost_variables, cost_coefficients
+
+# IDEA!
+# Add constraints as classes, which have methods to add the constraint to a model
+# Also that they have the postprocessing method to write the result given a model of that
+# constraint
+
+class Constraint:
+
+    def __init__(self, shop_data):
+        self.shop_data = shop_data  # passeu.utils.datastructures.ShopData
+
+    def apply(self, model, work):
+        pass
+
+    def output(self):
+        pass
+
+
+class WorkerExperience(Constraint):
+
+    def apply(self, model, work, **kwargs):
+        """
+
+        Args:
+            model (cp_model.CpModel()):
+            work (dict): Dictionary of (employee, shift, day): BooleanVar
+
+        Returns:
+
+        """
+        daily_experience_demands = kwargs.get('daily_experience_demands', None)  # maybe add as property via set attr
+
+        num_days = self.shop_data.num_days
+        employees = self.shop_data.employee_data.employees
+        num_employees = self.shop_data.employee_data.num_employees
+        levels = self.shop_data.employee_data.levels  # TODO: needs implementation
+
+        for d in range(num_days):
+            for l in levels:
+                variables = []
+                for e in range(num_employees):
+                    if employees[e].level == l:
+                        variables.extend([work[(e, s, d)] for s in range(1, self.shop_data.num_shifts)])
+                model.Add(sum(variables) >= daily_experience_demands[d][l])
+
