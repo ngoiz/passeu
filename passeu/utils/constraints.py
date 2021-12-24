@@ -154,6 +154,62 @@ def add_soft_sum_constraint(model, works, hard_min, soft_min, min_cost,
 
     return cost_variables, cost_coefficients
 
+
+def add_soft_sum_int_constraint(model, work_hours, hard_min, soft_min, min_cost,
+                                soft_max, hard_max, max_cost, prefix):
+    """
+    Enforces the sum of list of integer variables to be within hard_min and hard_max, and imposes
+    a linear penalty when the sum below soft_min or above soft_max. The penalty is linear, being
+    bounded between min_cost and 0 if under the soft_min or between 0 and max_cost if above soft_max
+
+    Args:
+        model (cp_model.CpModel):
+        work_hours (list(IntegerVariables)): List of IntegerVariables
+        hard_min (int): Hard minimum
+        soft_min (int): Soft minimum
+        min_cost (int): Maximum cost to apply if sum is hard_min
+        soft_max (int): Soft maximum
+        hard_max (int): Hard maximum
+        max_cost (int): Maximum cost to apply if sum is hard_max
+        prefix (str): String prefix for variable name
+
+    Returns:
+        tuple: (variables, coefficients) to be added to model minimisation function
+    """
+
+    cost_variables = []
+    cost_coefficients = []
+    sum_var = model.NewIntVar(hard_min, hard_max, '')
+    # This adds the hard constraints on the sum.
+    model.Add(sum_var == sum(work_hours))
+
+    if soft_min > hard_min and min_cost > 0: # else nothing to penalise
+
+        # delta = soft_min - sum_var, where sum_var in [hard_min, hard_max]
+        # therefore, delta must satisfy the following ranges
+        delta = model.NewIntVar(soft_min - hard_max, soft_min - hard_min, '')
+        model.Add(delta == soft_min - sum_var)
+
+        # if delta < 0, the variable is above soft_min -> no penalty
+        # therefore excess (which is the penalty applied) is [0, max(delta)]
+        excess = model.NewIntVar(0, soft_min - hard_min, prefix + ': under_sum')
+        model.AddMaxEquality(excess, [delta, 0])  # if delta < 0, then the variable is above soft_min and no need for penalty
+        cost_variables.append(excess)
+        cost_coefficients.append(min_cost)
+
+    if soft_max < hard_max and max_cost > 0:
+        delta = model.NewIntVar(hard_min - soft_max, hard_max - soft_max, '')
+        model.Add(delta == soft_max - sum_var)
+
+        # if delta < 0, then sum_var < soft_max -> no need por penalty
+        excess = model.NewIntVar(0, hard_max - soft_max, prefix + ': over_sum')
+        model.AddMaxEquality(excess, [delta, 0])
+        cost_variables.append(excess)
+        cost_coefficients.append(max_cost)
+
+    return cost_variables, cost_coefficients
+
+
 # IDEA!
 # Add constraints as classes, which have methods to add the constraint to a model
 # Also that they have the postprocessing method to write the result given a model of that
@@ -261,20 +317,39 @@ class OvertimeContractHours(Constraint):
             contract_hours = employees[e].contract_weekly_hours
             max_overtime = employees[e].maximum_overtime
 
-            sum_work_hours_week = sum([work_hours[(e, d)] for d in range(self.shop_data.num_days)])
+            sum_work_hours_week = [work_hours[(e, d)] for d in range(self.shop_data.num_days)]
 
-            if max_overtime == 0:
-                model.Add(sum_work_hours_week == contract_hours)
-                continue
-            else:
-                sum_var = model.NewIntVar(contract_hours, contract_hours + max_overtime, '')
-                model.Add(sum_var == sum_work_hours_week)  # enforce hours to be within hard limit
+            # if max_overtime == 0:
+            #     model.Add(sum_work_hours_week == contract_hours)
+            #     continue
+            #
+            variables, coefficients = add_soft_sum_int_constraint(model,
+                                                                  sum_work_hours_week,
+                                                                  contract_hours,
+                                                                  contract_hours,
+                                                                  0,
+                                                                  contract_hours,
+                                                                  contract_hours + max_overtime,
+                                                                  overtime_max_cost,
+                                                                  prefix)
 
-            delta_overtime = model.NewIntVar(0, max_overtime, '')  # actual overtime
-            model.Add(delta_overtime == sum_work_hours_week - contract_hours)
-            current_overtime = model.NewIntVar(0, max_overtime, prefix + ': contract_overtime')
-            model.AddMaxEquality(current_overtime, [delta_overtime, 0])  # max of delta, 0
-            cost_variables.append(current_overtime)
-            cost_coefficients.append(overtime_max_cost)
+            cost_variables.extend(variables)
+            cost_coefficients.extend(coefficients)
+
+            # else:
+            #     sum_var = model.NewIntVar(contract_hours, contract_hours + max_overtime, '')
+            #     model.Add(sum_var == sum_work_hours_week)  # enforce hours to be within hard limit
+            #
+            # delta_overtime = model.NewIntVar(0, max_overtime, '')  # actual overtime
+            # model.Add(delta_overtime == sum_work_hours_week - contract_hours)
+            # current_overtime = model.NewIntVar(0, max_overtime, prefix + ': contract_overtime')
+            # model.AddMaxEquality(current_overtime, [delta_overtime, 0])  # max of delta, 0
+            # cost_variables.append(current_overtime)
+            # cost_coefficients.append(overtime_max_cost)
 
         return cost_variables, cost_coefficients
+
+
+# class DailyManhoursDemand(Constraint):
+#
+#     def apply(self, model, work_hours, **kwargs):
