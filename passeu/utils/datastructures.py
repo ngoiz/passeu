@@ -3,12 +3,13 @@ import passeu.interface.interface as interface
 
 class EmployeeData:
 
-    def __init__(self, input_xls_file):
+    def __init__(self, input_xls_file=None):
 
         self.input_file_xls = input_xls_file
 
         self.employees = None  # list(Employee)
         self.employee_lookup = None  # dict name:id
+        self.levels = set()
 
         self.requests = []
 
@@ -22,7 +23,9 @@ class EmployeeData:
         self.employees = []
         for entry in employees_raw_data:
             self.employees.append(Employee(entry['name'],
-                                           contract_weekly_hours=entry['contract_weekly_hours']))
+                                           contract_weekly_hours=entry['contract_weekly_hours'],
+                                           level=entry.get('level', 0)))
+            self.levels.add(entry.get('level', 0))
 
     def create_requests(self, shop_data):
         # employee_name/id; shift; day; weight (negative is desire; positive is penalty)
@@ -58,10 +61,11 @@ class EmployeeData:
 class Employee:
     num_employees = 0  # class counter
 
-    def __init__(self, name, contract_weekly_hours, level=0):
+    def __init__(self, name, contract_weekly_hours, level=0, maximum_overtime=0):
         self.name = name
         self.id = Employee.num_employees
         self.contract_weekly_hours = contract_weekly_hours
+        self.maximum_overtime = maximum_overtime
         self.level = level
 
         Employee.num_employees += 1  # update counter

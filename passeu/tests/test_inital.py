@@ -4,7 +4,7 @@ import passeu.utils.constraints as constraints
 from absl import app
 from absl import flags
 from google.protobuf import text_format
-from passeu.utils.datastructures import Employee, ShopData
+from passeu.utils.datastructures import Employee, ShopData, EmployeeData
 
 FLAGS = flags.FLAGS
 
@@ -20,7 +20,7 @@ def solve_shift_scheduling(params, output_proto):
     shop_data = ShopData()
     employees = []
     employees.extend([
-        Employee('Logan', 40, level=1),
+        Employee('Logan', 32, level=1, maximum_overtime=6),
         Employee('Dass', 40, level=1),
         Employee('Curro', 40),
         Employee('Dakota', 26),
@@ -32,12 +32,19 @@ def solve_shift_scheduling(params, output_proto):
         # Employee('Marque2', 40)
     ]
     )
+    shop_data.employee_data = EmployeeData()
+    shop_data.employee_data.employees = employees
+    shop_data.employee_data.levels = {0, 1, 2}
+    levels = shop_data.employee_data.levels
+    shop_data.employee_data.requests = [(0, 0, 1, -2)] # Logan wants tuesday off
+
     # build from Employee data
     # Request: (employee, shift, day, weight)
     # A negative weight indicates that the employee desire this assignment.
-    requests = [
-        (0, 0, 1, -2)  # Logan wants tuesday off
-    ]
+    # requests = [
+    #     (0, 0, 1, -2)  # Logan wants tuesday off
+    # ]
+    requests = shop_data.employee_data.requests
     num_employees = len(employees)
 
 
@@ -163,9 +170,13 @@ def solve_shift_scheduling(params, output_proto):
             model.Add(work_hours[(e, d)] > 0).OnlyEnforceIf(work[(e, 0, d)].Not())
 
     # Max weekly working hours - currently a hard constraint to meet contract hours
-    # TODO: add soft_max (contract hours) and hard_max (overtime)
-    for e in range(num_employees):
-        model.Add(sum([work_hours[(e, d)] for d in range(shop_data.num_days)]) == employees[e].contract_weekly_hours)
+    # max_daily_hours = constraints.ContractHours(shop_data)
+    # max_daily_hours.apply(model, work_hours)
+
+    max_weekly_hours = constraints.OvertimeContractHours(shop_data)
+    vars, coeffs = max_weekly_hours.apply(model, work_hours, overtime_max_cost=5)
+    obj_int_vars.extend(vars)
+    obj_int_coeffs.extend(coeffs)
 
     # Weekly sum constraints
     for ct in weekly_sum_constraints:
@@ -181,15 +192,9 @@ def solve_shift_scheduling(params, output_proto):
                 obj_int_vars.extend(variables)
                 obj_int_coeffs.extend(coeffs)
 
-    # Daily experience requirements (and could be done per shift too but this example likely has too few employees)
-    levels = (0, 1, 2)  # currently all levels
-    for d in range(shop_data.num_days):
-        for l in levels:
-            variables = []
-            for e in range(num_employees):
-                if employees[e].level == l:
-                    variables.extend([work[(e, s, d)] for s in range(1, shop_data.num_shifts)])
-            model.Add(sum(variables) >= daily_experience_demands[d][l])
+    # # Daily experience requirements (and could be done per shift too but this example likely has too few employees)
+    daily_experience = constraints.WorkerExperienceDay(shop_data)
+    daily_experience.apply(model, work, daily_experience_demands=daily_experience_demands)
 
 
     # Penalized transitions
