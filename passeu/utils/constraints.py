@@ -198,7 +198,6 @@ def add_soft_sum_int_constraint(model, work_hours, hard_min, soft_min, min_cost,
         cost_coefficients.append(min_cost)
 
     if soft_max < hard_max and max_cost > 0:
-        # TODO: O think I am doing something the wrong way around....
         delta = model.NewIntVar(hard_min - soft_max, hard_max - soft_max, '')
         model.Add(delta == sum_var - soft_max)
 
@@ -208,7 +207,7 @@ def add_soft_sum_int_constraint(model, work_hours, hard_min, soft_min, min_cost,
         cost_variables.append(excess)
         cost_coefficients.append(max_cost)
 
-    return cost_variables, cost_coefficients, sum_var
+    return cost_variables, cost_coefficients
 
 # IDEA!
 # Add constraints as classes, which have methods to add the constraint to a model
@@ -247,7 +246,6 @@ class WorkerExperienceDay(Constraint):
         daily_experience_demands = kwargs.get('daily_experience_demands', None)  # maybe add as property via set attr
         obj_variables = []
         obj_coefficients = []
-        sum_variables = []
 
         num_days = self.shop_data.num_days
         employees = self.shop_data.employee_data.employees
@@ -260,20 +258,18 @@ class WorkerExperienceDay(Constraint):
                 for e in range(num_employees):
                     if employees[e].level == l:
                         variables.extend([work[(e, s, d)] for s in range(1, self.shop_data.num_shifts)])
-                # model.Add(sum(variables) >= daily_experience_demands[d][l])
                 prefix = f'daily_experience(day={d}, level={l})'
-                obj_vars, obj_coeffs, sum_var = add_soft_sum_int_constraint(model, variables,
+                obj_vars, obj_coeffs = add_soft_sum_int_constraint(model, variables,
                                                                    hard_min=daily_experience_demands[d][l],
                                                                    soft_min=daily_experience_demands[d][l],
                                                                    min_cost=0,
-                                                                   soft_max=daily_experience_demands[d][l], # TODO: check that if this is set to + 2 there is an indexError
+                                                                   soft_max=daily_experience_demands[d][l],
                                                                    hard_max=daily_experience_demands[d][l]+3,
                                                                    max_cost=5,
                                                                    prefix=prefix)
                 obj_variables.extend(obj_vars)
                 obj_coefficients.extend(obj_coeffs)
-                sum_variables.append(sum_var)
-        return obj_variables, obj_coefficients, sum_variables
+        return obj_variables, obj_coefficients
 
 
 class WorkerExperienceShift(Constraint):
@@ -306,7 +302,6 @@ class WorkerExperienceShift(Constraint):
                         if employees[e].level == l:
                             variables.append(work[(e, s, d)])
                     prefix = f'experience_l{l}d{d}{s}'
-                    # model.Add(sum(variables) >= daily_shift_experience_demands[d][s][l])
                     obj_vars, obj_coeffs = add_soft_sum_int_constraint(model, variables,
                                                                        hard_min=daily_shift_experience_demands[d][s][l],
                                                                        soft_min=daily_shift_experience_demands[d][s][l],
@@ -318,7 +313,7 @@ class WorkerExperienceShift(Constraint):
                     obj_variables.extend(obj_vars)
                     obj_coefficients.extend(obj_coeffs)
 
-        return variables, coefficients
+        return obj_variables, obj_coefficients
 
 
 class ContractHours(Constraint):
@@ -338,7 +333,6 @@ class ContractHours(Constraint):
         employees = self.shop_data.employee_data.employees
 
         # Max weekly working hours - currently a hard constraint to meet contract hours
-        # TODO: add soft_max (contract hours) and hard_max (overtime)
         for e in range(num_employees):
             model.Add(sum([work_hours[(e, d)] for d in range(self.shop_data.num_days)]) == employees[e].contract_weekly_hours)
 
@@ -363,8 +357,6 @@ class OvertimeContractHours(Constraint):
             tuple: (variables, coefficients) overtime variables and excess coefficients to be added to model
               minimisation function.
 
-        Warning:
-            Overtime not yet tested (0 overtime works)
         """
         overtime_max_cost = kwargs.get('overtime_max_cost', 5)
         cost_variables = []
@@ -380,33 +372,18 @@ class OvertimeContractHours(Constraint):
 
             sum_work_hours_week = [work_hours[(e, d)] for d in range(self.shop_data.num_days)]
 
-            # if max_overtime == 0:
-            #     model.Add(sum_work_hours_week == contract_hours)
-            #     continue
-            #
-            variables, coefficients, _ = add_soft_sum_int_constraint(model,
-                                                                  sum_work_hours_week,
-                                                                  contract_hours,
-                                                                  contract_hours,
-                                                                  0,
-                                                                  contract_hours,
-                                                                  contract_hours + max_overtime,
-                                                                  overtime_max_cost,
-                                                                  prefix)
+            variables, coefficients = add_soft_sum_int_constraint(model,
+                                                                     sum_work_hours_week,
+                                                                     contract_hours,
+                                                                     contract_hours,
+                                                                     0,
+                                                                     contract_hours,
+                                                                     contract_hours + max_overtime,
+                                                                     overtime_max_cost,
+                                                                     prefix)
 
             cost_variables.extend(variables)
             cost_coefficients.extend(coefficients)
-
-            # else:
-            #     sum_var = model.NewIntVar(contract_hours, contract_hours + max_overtime, '')
-            #     model.Add(sum_var == sum_work_hours_week)  # enforce hours to be within hard limit
-            #
-            # delta_overtime = model.NewIntVar(0, max_overtime, '')  # actual overtime
-            # model.Add(delta_overtime == sum_work_hours_week - contract_hours)
-            # current_overtime = model.NewIntVar(0, max_overtime, prefix + ': contract_overtime')
-            # model.AddMaxEquality(current_overtime, [delta_overtime, 0])  # max of delta, 0
-            # cost_variables.append(current_overtime)
-            # cost_coefficients.append(overtime_max_cost)
 
         return cost_variables, cost_coefficients
 
