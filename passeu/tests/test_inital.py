@@ -194,8 +194,9 @@ def solve_shift_scheduling(params, output_proto):
 
     # # Daily experience requirements (and could be done per shift too but this example likely has too few employees)
     daily_experience = constraints.WorkerExperienceDay(shop_data)
-    daily_experience.apply(model, work, daily_experience_demands=daily_experience_demands)
-
+    exp_vars, exp_coeffs, sum_vars = daily_experience.apply(model, work, daily_experience_demands=daily_experience_demands)
+    obj_int_vars.extend(exp_vars)
+    obj_int_coeffs.extend(exp_coeffs)
 
     # Penalized transitions
     for previous_shift, next_shift, cost in penalized_transitions:
@@ -319,6 +320,13 @@ def solve_shift_scheduling(params, output_proto):
     print('  - branches        : %i' % solver.NumBranches())
     print('  - wall time       : %f s' % solver.WallTime())
 
+    print()
+    print('Other variables')
+    for i, var in enumerate(sum_vars):
+        print(f'{var.Name()} = {solver.Value(var)}')
+
+    for i, var in enumerate(exp_vars):
+        print(f'{var.Name()} = {solver.Value(var)}')
 
 def main(_):
     solve_shift_scheduling(FLAGS.params, FLAGS.output_proto)
