@@ -24,3 +24,7 @@ Applied by day:
 
 By shift:
   - training: hard constraint for x person to be with Y
+
+### Other OR-Tools Refs
+
+https://github.com/YooTimmy/restaurant_scheduler/blob/main/restaurant_scheduler.py
